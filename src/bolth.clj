@@ -276,13 +276,12 @@
          (maybe-system-exit results options)
          results)))))
 
-(defn pretty-reload
-  ([] (pretty-reload [] {}))
+(defn pretty-refresh
+  ([] (pretty-refresh [] {}))
   ([tools-ns-args frame-options]
    (require 'clojure.tools.namespace.repl)
    (require 'io.aviso.exception)
    (let [r (apply (resolve 'clojure.tools.namespace.repl/refresh) tools-ns-args)]
      (when (instance? Throwable r)
        ((resolve 'io.aviso.exception/write-exception) r))
-     r))
-  )
+     r)))
