@@ -20,9 +20,14 @@
 
 ; test runner results
 
-;; holds a persistent queue or a list or a vector (perf test this)
-;; of test results, for later analysis by the runner
-(def ^:dynamic *test-runner-state* nil)
+(def ^{:dynamic true
+       :doc
+       "holds an (atom []) of test results, for later analysis by the runner, iff the runner is reporting slow tests"}
+  *test-runner-state* nil)
+
+       (def ^{:dynamic true
+       :doc "because we print exceptions via clojure.test's report methods, we have to stuff these options in a dynamic var"}
+  *frame-options* {:frame-limit 10})
 
 (defn record-test-finished [m]
   (when *test-runner-state*
@@ -109,10 +114,8 @@
       (if (instance? Throwable actual)
         (do
           (prn)
-          (io.aviso.exception/write-exception *out* actual {:frame-limit 10}))
+          (io.aviso.exception/write-exception *out* actual *frame-options*))
         (prn actual)))))
-
-
 
 (defn nanos->ms [nanos]
   (float (/ nanos 1000000)))
@@ -244,12 +247,16 @@
   :exit-with-error-code : an boolean (defaults to false)
 
   if set to a truthy value, calls (System/exit) after running, with exit code 0 if all the tests passed, or exit code 1 if any tests failed.
-  "
+
+  :frame-options : an map (defaults to {:frame-limit 10})
+
+  options for io.aviso.exception/write-exception. Defaults to just showing 10 lines from exception stacktraces. See (doc io.aviso.exception/write-exception) for full documentation."
   ([] (run-all-tests #".*"))
   ([ns-re] (run-all-tests ns-re {}))
   ([ns-re options]
    (let [writer (if (:force-real-stdout options) (java.io.PrintWriter. System/out) *out*)]
      (binding [*out* writer
+               *frame-options* (:frame-options options *frame-options*)
                clojure.test/*test-out* writer
                *test-runner-state* (if (:show-slow-tests options)
                                      (atom {:last-test-finished (System/nanoTime) :results []}))]
@@ -268,3 +275,14 @@
          (maybe-show-slow-tests results options)
          (maybe-system-exit results options)
          results)))))
+
+(defn pretty-reload
+  ([] (pretty-reload [] {}))
+  ([tools-ns-args frame-options]
+   (require 'clojure.tools.namespace.repl)
+   (require 'io.aviso.exception)
+   (let [r (apply (resolve 'clojure.tools.namespace.repl/refresh) tools-ns-args)]
+     (when (instance? Throwable r)
+       ((resolve 'io.aviso.exception/write-exception) r))
+     r))
+  )
