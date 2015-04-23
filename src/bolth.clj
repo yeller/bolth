@@ -172,59 +172,98 @@
                    (float (/ (:runtime results) total)))
            "ms per test"))))
 
-(defn run-all-tests
-  ([] (run-all-tests #".*"))
-  ([ns-re] (run-all-tests ns-re {}))
-  ([ns-re options]
-   (binding [*out* (java.io.PrintWriter. System/out)
-             clojure.test/*test-out* (java.io.PrintWriter. System/out)
-             *test-runner-state* (atom {:last-test-finished (System/nanoTime) :results []})]
-     (println (apply str (repeat 50 "\n")))
-     (println "running...")
-     (flush)
-     (let [running (atom true)
-           f (future (while @running (do (Thread/sleep 10) (flush))))
-           t0 (System/nanoTime)
-           test-run (clojure.test/run-all-tests ns-re)
-           t1 (System/nanoTime)
-           results {:test-run test-run
-                    :test-runner-state @*test-runner-state*
-                    :runtime (float (/ (- t1 t0) 1000000))}]
-       (reset! running false)
-       (println "\n")
-       (if (failing-tests? results)
-         (println (redify (format-results results)))
-         (println (greenify (format-results results))))
-       (when (< (:warn-on-slow-test-limit-ms options 1000) (:runtime results))
-         (println (redify "SLOW TEST RUN")))
-       (if (and (not (failing-tests? results))
-                (:show-slow-tests options))
-         (println (format-slow-tests results options)))
-       results))))
+(defn clear-screen [options]
+  (when (:clear-screen options)
+    (println (apply str (repeat (:clear-screen-lines options 50) "\n")))
+    (println "running...")
+    (flush)))
+
+(defn maybe-show-slow-tests [results options]
+  (if (and (not (failing-tests? results))
+           (:show-slow-tests options))
+    (println (format-slow-tests results options))))
+
+(defn maybe-warn-on-slow-test-run [results options]
+  (when (and (contains? options :warn-on-slow-test-limit-ms) (< (:warn-on-slow-test-limit-ms options 1000) (:runtime results)))
+    (println (redify "SLOW TEST RUN"))))
+
+(defn start-flusher [interval]
+  (future (if interval (while true (do (Thread/sleep interval) (flush))))))
+
+(defn colorized-summary [results]
+  (if (failing-tests? results)
+    (redify (format-results results))
+    (greenify (format-results results))))
+
+(defn maybe-system-exit [results options]
+  (if (:exit-with-error-code options false)
+    (if (failing-tests? results)
+      (System/exit 1)
+      (System/exit 0))))
 
 (defn run-all-tests
+  "runs tests, just like clojure.test/run-all-tests.
+   Takes an optional regex to only run matching vars, and an options map.
+
+  Available options:
+  :show-slow-tests : an boolean (default is false)
+
+  tracks individual test runtimes and reports the slowest N tests (where N is specified by the option :slow-test-count, defaults to 10)
+
+  :slow-test-count : an positive number (default is 10)
+
+  the number of slow tests to report (see :show-slow-tests)
+
+  :warn-on-slow-test-limit-ms : an positive number (defaults to 1000ms which is 1 second : feedback time is an thing)
+
+  prints a warning if the total test runtime is over the number of ms specified by this option. Feedback time is a real thing.
+
+  :clear-screen : an boolean (defaults to false)
+
+  if set to true, prints (:clear-screen-lines options 50) before running tests, to clear any existing screen state
+
+  :clear-screen-lines : an positive integer (defaults to 50)
+
+  see :clear-screen
+
+  :force-real-stdout : an boolean (defaults to false)
+
+  if set as a truthy value, overrides stdout to be System/out. This is useful if you're running in an editor in a tmux split
+  with the repl, and triggering test runs via the editor or grenchman - it means the test output will go in the repl, so it'll
+  hang around
+
+  :flush-interval : an positive integer (defaults to 10)
+
+  bolth prints a `.` whilst running tests, for each test run. Many test runners flush stdout after printing each `.`, but this
+  can significantly slow down test suites if the suite is large enough or the terminal it's printing to is slow enough.
+  Instead, bolth spawns a thread that flushes stdout every (:flush-interval options 10) milliseconds. This gives you timely
+  feedback that the suite is still running, whilst not causing performance issues. After the run is finished the thread is
+  cleaned up.
+
+  :exit-with-error-code : an boolean (defaults to false)
+
+  if set to a truthy value, calls (System/exit) after running, with exit code 0 if all the tests passed, or exit code 1 if any tests failed.
+  "
   ([] (run-all-tests #".*"))
   ([ns-re] (run-all-tests ns-re {}))
   ([ns-re options]
-   (binding [*out* (java.io.PrintWriter. System/out)
-             clojure.test/*test-out* (java.io.PrintWriter. System/out)
-             *test-runner-state* (atom {:last-test-finished (System/nanoTime) :results []})]
-     (let [running (atom true)
-           f (future (while @running (do (Thread/sleep 10) (flush))))
-           t0 (System/nanoTime)
-           test-run (clojure.test/run-all-tests ns-re)
-           t1 (System/nanoTime)
-           results {:test-run test-run
-                    :test-runner-state @*test-runner-state*
-                    :runtime (float (/ (- t1 t0) 1000000))}]
-       (reset! running false)
-       (println "\n")
-       (if (failing-tests? results)
-         (println (str "\u001B[31m" (format-results results) "\u001B[m"))
-         (println (str "\u001B[32m" (format-results results) "\u001B[m")))
-       (when (< 700 (:runtime results))
-         (println (redify "SLOW TEST RUN")))
-       (if (and (not (failing-tests? results))
-                (:show-slow-tests options))
-         (println (format-slow-tests results options)))
-       results))))
+   (let [writer (if (:force-real-stdout options) (java.io.PrintWriter. System/out) *out*)]
+     (binding [*out* writer
+               clojure.test/*test-out* writer
+               *test-runner-state* (if (:show-slow-tests options)
+                                     (atom {:last-test-finished (System/nanoTime) :results []}))]
+       (clear-screen options)
+       (let [f (start-flusher (:flush-interval options 10))
+             t0 (System/nanoTime)
+             test-run (clojure.test/run-all-tests ns-re)
+             t1 (System/nanoTime)
+             results {:test-run test-run
+                      :test-runner-state (if *test-runner-state* @*test-runner-state*)
+                      :runtime (float (/ (- t1 t0) 1000000))}]
+         (future-cancel f)
+         (println "\n")
+         (println (colorized-summary results))
+         (maybe-warn-on-slow-test-run results options)
+         (maybe-show-slow-tests results options)
+         (maybe-system-exit results options)
+         results)))))
