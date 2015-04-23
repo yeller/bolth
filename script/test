@@ -1,0 +1,3 @@
+#!/bin/bash
+
+grench eval "(require '[bolth-test :reload true]) (require '[bolth :reload true]) (clojure.pprint/pprint (bolth/run-all-tests #\".*\" {:clear-screen true :warn-on-slow-test-limit-ms 10 :force-real-stdout true}))"
