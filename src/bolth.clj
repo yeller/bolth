@@ -12,6 +12,12 @@
     s
     "\u001B[m"))
 
+
+(defn greenify [s]
+  (str "\u001B[32m"
+       s
+       "\u001B[m"))
+
 ; test runner results
 
 ;; holds a persistent queue or a list or a vector (perf test this)
@@ -187,8 +193,8 @@
        (reset! running false)
        (println "\n")
        (if (failing-tests? results)
-         (println (str "\u001B[31m" (format-results results) "\u001B[m"))
-         (println (str "\u001B[32m" (format-results results) "\u001B[m")))
+         (println (redify (format-results results)))
+         (println (greenify (format-results results))))
        (when (< (:warn-on-slow-test-limit-ms options 1000) (:runtime results))
          (println (redify "SLOW TEST RUN")))
        (if (and (not (failing-tests? results))
