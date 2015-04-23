@@ -215,7 +215,8 @@
   "runs tests, just like clojure.test/run-all-tests.
    Takes an optional regex to only run matching vars, and an options map.
 
-  Available options:
+  ## Available options
+
   :show-slow-tests : an boolean (default is false)
 
   tracks individual test runtimes and reports the slowest N tests (where N is specified by the option :slow-test-count, defaults to 10).
@@ -257,7 +258,40 @@
 
   :frame-options : an map (defaults to {:frame-limit 10})
 
-  options for io.aviso.exception/write-exception. Defaults to just showing 10 lines from exception stacktraces. See (doc io.aviso.exception/write-exception) for full documentation."
+  options for io.aviso.exception/write-exception. Defaults to just showing 10 lines from exception stacktraces. See (doc io.aviso.exception/write-exception) for full documentation.
+
+  ## Returned value
+
+  After running (assuming :exit-with-error-code wasn't set),
+  run-all-tests returns a value detailing the test run:
+
+  {:test-run {:type :summary, :fail 1, :error 0, :pass 1, :test 2},
+
+  the return value from clojure.test. Returns counts of passing/failing/etc tests
+
+
+  :test-runner-state
+  {:last-test-finished 157616785527862,
+    :results
+    [{:vars \"(an-failing-test) (bolth_test.clj:7)\",
+      :contexts \"\",
+      :result
+      {:message nil,
+      :actual (2),
+      :expected 1,
+      :diffs ([2 (1 2)]),
+      :type :fail,
+      :file \"bolth_test.clj\",
+      :line 7},
+      :runtime 37586569}]},
+
+  iff :show-slow-tests is enabled, will contain a set of test run results.
+
+  :runtime 45.505684
+
+  the overall time taken for this call, in milliseconds
+
+  }"
   ([] (run-all-tests #".*"))
   ([ns-re] (run-all-tests ns-re {}))
   ([ns-re options]
