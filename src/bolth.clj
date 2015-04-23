@@ -208,7 +208,8 @@
   Available options:
   :show-slow-tests : an boolean (default is false)
 
-  tracks individual test runtimes and reports the slowest N tests (where N is specified by the option :slow-test-count, defaults to 10)
+  tracks individual test runtimes and reports the slowest N tests (where N is specified by the option :slow-test-count, defaults to 10).
+  Note that if any tests fail, the slow tests won't be shown (because you should fix the tests before optimizing test runtime).
 
   :slow-test-count : an positive number (default is 10)
 
