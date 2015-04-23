@@ -1,10 +1,15 @@
 # bolth
 
 ## TODO: picture of usain bolt
+## TODO: bolt quote on speed
 
 A Clojure library that provides a better test runner for `clojure.test`. Humane
 failure output (with pprinted data diffs), humane exception stacktraces, colorized test
 results, and a variety of reporting options.
+
+## Installation
+
+grab from clojars
 
 ## Usage
 
