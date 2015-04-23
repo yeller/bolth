@@ -204,6 +204,13 @@
       (System/exit 1)
       (System/exit 0))))
 
+(defn validate-options [options]
+  (assert (and (number? (:slow-test-count options 10)) (pos? (:slow-test-count options 10))) (str ":slow-test-count should be a positive number, but was: " (pr-str (:slow-test-count options 10))))
+  (assert (and (number? (:warn-on-slow-test-limit-ms options 1000)) (pos? (:warn-on-slow-test-limit-ms options 1000))) (str ":warn-on-slow-test-limit-ms should be a positive number, but was: " (pr-str (:warn-on-slow-test-limit-ms options 1000))))
+  (assert (and (number? (:clear-screen-lines options 50)) (pos? (:clear-screen-lines options 50))) (str ":clear-screen-lines should be a positive number, but was: " (pr-str (:clear-screen-lines options 50))))
+  (assert (and (number? (:flush-interval options 10)) (pos? (:flush-interval options 50))) (str ":flush-interval should be a positive number, but was: " (pr-str (:flush-interval options 50))))
+  (assert (map? (:frame-options options *frame-options*)) (str ":frame-options should be a map, but was: " (pr-str (:frame-options options *frame-options*)))))
+
 (defn run-all-tests
   "runs tests, just like clojure.test/run-all-tests.
    Takes an optional regex to only run matching vars, and an options map.
@@ -254,6 +261,7 @@
   ([] (run-all-tests #".*"))
   ([ns-re] (run-all-tests ns-re {}))
   ([ns-re options]
+   (validate-options options)
    (let [writer (if (:force-real-stdout options) (java.io.PrintWriter. System/out) *out*)]
      (binding [*out* writer
                *frame-options* (:frame-options options *frame-options*)
