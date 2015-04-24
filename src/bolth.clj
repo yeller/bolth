@@ -3,7 +3,9 @@
             [clojure.pprint :as pp]
             clojure.data
             clojure.test
-            io.aviso.exception))
+            io.aviso.exception)
+  (:import java.util.concurrent.LinkedBlockingQueue
+           java.util.AbstractQueue))
 
 ;; helpers
 (defn redify [s]
@@ -18,30 +20,106 @@
        s
        "\u001B[m"))
 
-; test runner results
-
 (def ^{:dynamic true
        :doc
        "holds an (atom []) of test results, for later analysis by the runner, iff the runner is reporting slow tests"}
   *test-runner-state* nil)
 
-       (def ^{:dynamic true
+(def ^{:dynamic true
        :doc "because we print exceptions via clojure.test's report methods, we have to stuff these options in a dynamic var"}
   *frame-options* {:frame-limit 10})
 
-(defn record-test-finished [m]
-  (when *test-runner-state*
-    (let [now (System/nanoTime)]
-      (swap! *test-runner-state*
-             (fn [runner-state]
-               {:last-test-finished now
-                :results
-                (conj (:results runner-state)
-                      {:vars (clojure.test/testing-vars-str m)
-                       :contexts (clojure.test/testing-contexts-str)
-                       :result m
-                       :runtime (- now (:last-test-finished runner-state))})})))))
+(def ^{:dynamic true
+       :doc
+       "stores the results of running tests"} *result-queue* nil)
 
+(defmacro with-test-out-str
+  "Evaluates exprs in a context in which *out* and *test-out* are bound to a
+  fresh StringWriter.  Returns the string created by any nested printing
+  calls."
+  {:added "1.0"}
+  [& body]
+  `(let [s# (new java.io.StringWriter)]
+     (binding [clojure.test/*test-out* s#
+               *out* s#]
+       ~@body
+       (str s#))))
+
+(defmacro with-test-out [& body]
+  `(let [x# (with-test-out-str ~@body)]
+     (.put *result-queue* x#)))
+
+(defn gather-tests-from-ns [^AbstractQueue queue n]
+  (let [once-fixture-fn (clojure.test/join-fixtures (::once-fixtures (meta n)))
+        each-fixture-fn (clojure.test/join-fixtures (::each-fixtures (meta n)))]
+    (doseq [v (vals (ns-interns n))]
+      (when (:test (meta v))
+        (.put queue [v each-fixture-fn once-fixture-fn])))))
+
+(defn record-test-finished [v runtime]
+  (when *test-runner-state*
+    (swap! *test-runner-state*
+           (fn [runner-state]
+             {:results
+              (conj (:results runner-state)
+                    {:vars v
+                     :runtime runtime})}))))
+
+(defn test-var [^AbstractQueue result-queue v]
+  (when-let [t (:test (meta v))]
+    (let [t0 (System/nanoTime)]
+      (try (t)
+        (catch Throwable e
+          (clojure.test/do-report
+            {:type :error, :message "Uncaught exception, not in assertion."
+             :expected nil, :actual e}))
+        (finally
+          (record-test-finished v (- (System/nanoTime) t0)))))))
+
+(defn run-worker [results tests-to-run worker-id finished]
+  (future
+    (try
+      (binding [*result-queue* results
+                clojure.test/*report-counters* (ref {:pass 0 :fail 0 :error 0})]
+        (loop []
+          (if-let [[tvar each-fixture once-fixture] (.poll tests-to-run)]
+            (do
+              (once-fixture
+                (fn []
+                  (each-fixture
+                    #(test-var results tvar))))
+              (recur))
+            (do
+              (deliver (nth finished worker-id) clojure.test/*report-counters*)))))
+      (catch Throwable e
+        (.printStackTrace e))
+      (finally (deliver (nth finished worker-id) 1)))))
+
+(defn run-gathered-tests [^AbstractQueue tests-to-run pharrallelism]
+  (let [results (LinkedBlockingQueue.)
+        finished (into [] (map (fn [_] (promise)) (range pharrallelism)))]
+    (dotimes [worker-id pharrallelism]
+      (run-worker results tests-to-run worker-id finished))
+    (doseq [n finished]
+      (deref n))
+    (doseq [r (iterator-seq (.iterator results))]
+      (print r))
+    (apply merge-with + (map (comp deref deref) finished))))
+
+(defn gather-tests [ns-re]
+  (let [queue (LinkedBlockingQueue.)]
+    (doseq [n (filter #(re-matches ns-re (name (ns-name %))) (all-ns))]
+      (gather-tests-from-ns queue n))
+    queue))
+
+(defn default-pharrallelism []
+  (.. Runtime getRuntime availableProcessors))
+
+(defn run-tests
+  ([ns-re] (run-tests ns-re (default-pharrallelism)))
+  ([ns-re pharrallelism]
+   (-> (gather-tests ns-re)
+     (run-gathered-tests pharrallelism))))
 
 ;; clojure.test monkey punching
 (defmethod clojure.test/assert-expr '= [msg [_ a & more]]
@@ -63,8 +141,7 @@
 (defmethod clojure.test/report :begin-test-ns  [m])
 (defmethod clojure.test/report :summary  [m])
 (defmethod clojure.test/report :pass [m]
-  (clojure.test/with-test-out
-    (record-test-finished m)
+  (with-test-out
     (clojure.test/inc-report-counter :pass)
     (print ".")))
 
@@ -92,8 +169,7 @@
         (print-expected actual)))))
 
 (defmethod clojure.test/report :fail [m]
-  (clojure.test/with-test-out
-    (record-test-finished m)
+  (with-test-out
     (clojure.test/inc-report-counter :fail)
     (println "\n\n\u001B[31mFAIL\u001B[m in" (clojure.test/testing-vars-str m))
     (when (seq clojure.test/*testing-contexts*) (println (clojure.test/testing-contexts-str)))
@@ -102,8 +178,7 @@
     (pprint-test-failure m)))
 
 (defmethod clojure.test/report :error [m]
-  (clojure.test/with-test-out
-    (record-test-finished m)
+  (with-test-out
     (clojure.test/inc-report-counter :error)
     (println "\n\n\u001B[31mERROR\u001B[m in" (clojure.test/testing-vars-str m))
     (when (seq clojure.test/*testing-contexts*) (println (clojure.test/testing-contexts-str)))
@@ -121,7 +196,9 @@
   (float (/ nanos 1000000)))
 
 (defn format-slow-test-result [test-result]
-  (str (string/join "" (drop 1 (take-while #(not= % \)) (:vars test-result))))
+  (str (:ns (meta (:vars test-result)))
+       "/"
+       (:name (meta (:vars test-result)))
        " in "
        (format "%.2f" (nanos->ms (:runtime test-result)))
        "ms"
@@ -271,8 +348,7 @@
 
 
   :test-runner-state
-  {:last-test-finished 157616785527862,
-    :results
+  {:results
     [{:vars \"(an-failing-test) (bolth_test.clj:7)\",
       :contexts \"\",
       :result
@@ -301,11 +377,11 @@
                *frame-options* (:frame-options options *frame-options*)
                clojure.test/*test-out* writer
                *test-runner-state* (if (:show-slow-tests options)
-                                     (atom {:last-test-finished (System/nanoTime) :results []}))]
+                                     (atom {:results []}))]
        (clear-screen options)
        (let [f (start-flusher (:flush-interval options 10))
              t0 (System/nanoTime)
-             test-run (clojure.test/run-all-tests ns-re)
+             test-run (run-tests ns-re (:parallelism options (default-pharrallelism)))
              t1 (System/nanoTime)
              results {:test-run test-run
                       :test-runner-state (if *test-runner-state* @*test-runner-state*)
