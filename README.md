@@ -1,7 +1,8 @@
 # bolth
 
-## TODO: picture of usain bolt
-## TODO: bolt quote on speed
+![](https://raw.github.com/yeller/bolth/master/doc/bolth.jpg)
+
+> My name is Bolth, Lightning Bolth.
 
 A Clojure library that provides a better test runner for `clojure.test`. Humane
 failure output (with pprinted data diffs), humane exception stacktraces, colorized test
@@ -38,3 +39,7 @@ Copyright © 2015 Tom Crayford
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
+
+# Creative Commons
+
+Usain Bolth photo used under Creative Commons from https://www.flickr.com/photos/bruneluniversity/3794955418
