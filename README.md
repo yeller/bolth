@@ -21,13 +21,11 @@ of options.
 
 Here's what it looks like in typical usage with a bunch of the options enabled:
 
-## TODOs: gifs
+![](https://raw.github.com/yeller/bolth/master/doc/normal_run.gif)
 
-## TODO: passing run
+![](https://raw.github.com/yeller/bolth/master/doc/failing_run.gif)
 
-## TODO: failing run with diffs
-
-## TODO: passing run with slow tests reported
+![](https://raw.github.com/yeller/bolth/master/doc/slow_test_run.gif)
 
 There's also an helper function that uses `io.aviso.exception/write-exception`
 to call clojure.tools.namespace.repl/refresh and pretty print the exception
