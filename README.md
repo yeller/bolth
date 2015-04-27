@@ -1,6 +1,6 @@
 # bolth
 
-![](https://raw.github.com/yeller/bolth/master/doc/bolth.jpg)
+![](/doc/bolth.jpg?raw=true)
 
 > My name is Bolth, Lightning Bolth.
 
@@ -22,11 +22,11 @@ of options (see the docstring for more).
 
 Here's what it looks like in typical usage with a bunch of the options enabled:
 
-![](https://raw.github.com/yeller/bolth/master/doc/normal_run.gif)
+![](/doc/normal_run.gif?raw=true)
 
-![](https://raw.github.com/yeller/bolth/master/doc/failing_run.gif)
+![](/doc/failing_run.gif?raw=true)
 
-![](https://raw.github.com/yeller/bolth/master/doc/slow_test_run.gif)
+![](/doc/slow_test_run.gif?raw=true)
 
 There's also an helper function that uses `io.aviso.exception/write-exception`
 to call clojure.tools.namespace.repl/refresh and pretty print the exception
