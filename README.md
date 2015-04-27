@@ -18,7 +18,7 @@ There's one main function: `bolth/run-all-tests`.
 
 `run-all-tests` mirrors the interface of `clojure.test/run-all-tests`: it takes
 a regex to specify which tests to run. However, it also takes an option map with a whole load
-of options.
+of options (see the docstring for more).
 
 Here's what it looks like in typical usage with a bunch of the options enabled:
 
