@@ -6,6 +6,7 @@
             io.aviso.exception
             [bolth.state :as state])
   (:import java.util.concurrent.LinkedBlockingQueue
+           java.util.concurrent.ArrayBlockingQueue
            java.util.AbstractQueue))
 
 ;; colour helpers
@@ -127,20 +128,23 @@
       (finally (deliver (nth finished worker-id) 1)))))
 
 (defn run-gathered-tests [^AbstractQueue tests-to-run pharrallelism]
-  (let [results (LinkedBlockingQueue.)
+  (let [results (ArrayBlockingQueue. 1024)
         finished (into [] (map (fn [_] (promise)) (range pharrallelism)))
-        workers (map #(run-worker results tests-to-run % finished) (range pharrallelism))]
+        workers (map #(run-worker results tests-to-run % finished) (range pharrallelism))
+        printer (future
+                  (while true
+                    (if-let [r (.poll results)]
+                      (print r))))]
     (try
       (dorun workers)
       (doseq [n finished]
         (deref n))
-      (doseq [r (iterator-seq (.iterator results))]
-        (print r))
+      (future-cancel printer)
       (apply merge-with + (map (comp deref deref) finished))
-      (catch java.lang.ThreadDeath e
+      (finally
+        (future-cancel printer)
         (doseq [worker workers]
-          (future-cancel worker))
-        (throw e)))))
+          (future-cancel worker))))))
 
 (defn gather-tests [ns-re]
   (let [queue (atom [])]
@@ -168,7 +172,7 @@
     tests))
 
 (defn pour-tests-to-queue [tests]
-  (let [queue (LinkedBlockingQueue. (count tests))]
+  (let [queue (ArrayBlockingQueue. (count tests))]
     (doseq [t tests]
       (.put queue t))
     queue))
