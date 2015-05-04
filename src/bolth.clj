@@ -127,26 +127,30 @@
         (.printStackTrace e))
       (finally (deliver (nth finished worker-id) 1)))))
 
+(defn format-progress-result [^String r full-failures]
+  (if (= r ".")
+    "."
+    (do
+      (swap! full-failures conj r)
+      (if (.contains r "ERROR")
+        (redify "E")
+        (redify "F")))))
+
 (defn run-gathered-tests [^AbstractQueue tests-to-run pharrallelism]
   (let [results (LinkedBlockingQueue.)
-        printer-running (atom true)
         finished (into [] (map (fn [_] (promise)) (range pharrallelism)))
         workers (map #(run-worker results tests-to-run % finished) (range pharrallelism))
-        printer (future
-                  (while @printer-running
-                    (if-let [r (.poll results)]
-                      (print r)
-                      (Thread/sleep 10))))]
+        full-failures (atom [])]
     (try
       (dorun workers)
       (doseq [n finished]
         (deref n))
-      (reset! printer-running false)
-      (future-cancel printer)
+      (doseq [r (iterator-seq (.iterator results))]
+        (print (format-progress-result r full-failures)))
+      (doseq [failure @full-failures]
+        (print failure))
       (apply merge-with + (map (comp deref deref) finished))
       (finally
-        (reset! printer-running false)
-        (future-cancel printer)
         (doseq [worker workers]
           (future-cancel worker))))))
 
