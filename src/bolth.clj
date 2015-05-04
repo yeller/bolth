@@ -154,7 +154,7 @@
      (if (#{:error :fail} (:result-type previous-result)) (:runtime previous-result))
      (:runtime previous-result)]))
 
-(defn prioritize-tests [tests]
+(defn smart-prioritize-tests [tests]
   (if-let [results @state/*previous-test-run*]
     (let [mapped-results (into {} (map (fn [[k v]] [(str k) v]) results))
           prioritized
@@ -174,14 +174,12 @@
 (defn default-pharrallelism []
   (.. Runtime getRuntime availableProcessors))
 
-(defn run-tests
-  ([ns-re] (run-tests ns-re (default-pharrallelism)))
-  ([ns-re pharrallelism]
-   (-> (gather-tests ns-re)
-     deref
-     prioritize-tests
-     pour-tests-to-queue
-     (run-gathered-tests pharrallelism))))
+(defn run-tests [ns-re pharrallelism prioritizer]
+  (-> (gather-tests ns-re)
+    deref
+    prioritizer
+    pour-tests-to-queue
+    (run-gathered-tests pharrallelism)))
 
 ;; clojure.test monkey punching
 (defmethod clojure.test/assert-expr '= [msg [_ a & more]]
@@ -348,6 +346,23 @@
       (System/exit 1)
       (System/exit 0))))
 
+(defn options->prioritizer [options]
+  (cond
+    (and (nil? (:prioritizer options)) (nil? (:priority options)))
+    smart-prioritize-tests
+
+    (:prioritizer options)
+    (:prioritizer options)
+
+    (= (:priority options) :agony)
+    smart-prioritize-tests
+
+    (= (:priority options) :random)
+    shuffle
+
+    (= (:priority options) :gathered)
+    identity))
+
 (defn validate-options [options]
   (assert (and (number? (:slow-test-count options 10)) (pos? (:slow-test-count options 10))) (str ":slow-test-count should be a positive number, but was: " (pr-str (:slow-test-count options 10))))
   (assert (and (number? (:warn-on-slow-test-limit-ms options 1000)) (pos? (:warn-on-slow-test-limit-ms options 1000))) (str ":warn-on-slow-test-limit-ms should be a positive number, but was: " (pr-str (:warn-on-slow-test-limit-ms options 1000))))
@@ -408,6 +423,26 @@
 
   sets if bolth will print results with color or not. Defaults to true.
 
+  :priority : an keyword, one of :agony, :random, :gathered (defaults to :agony)
+
+  sets how bolth will order test runs. This interacts with parallelism in an interesting way; whilst the
+  priority does set which tests get to start first, it doesn't dictate the order they finish in.
+  Available options:
+    :agony  : attempts to run tests in an order that gives the quickest feedback. Starts with any new tests,
+              moving on to the fastest failing test, moving on to slower failing tests, then the fastest
+              passing test moving on to the slowest passing test. If there was no previous test run recorded,
+              this is the same as :gathered
+
+    :random : runs tests in a random order (literally just calls `clojure.core/shuffle` on the tests
+
+    :gathered : runs tests in the order they were found by crawling namespaces
+
+  :prioritizer : an function (defaults to nil)
+
+  lets you pass a custom function to determine which order the tests are run in. Takes a seq
+  of [var test-f fixture-each-f fixture-once-f], and returns them in whatever order you like.
+  Note that this takes priority over passing :priority.
+
   ## Returned value
 
   After running (assuming :exit-with-error-code wasn't set),
@@ -451,7 +486,7 @@
        (clear-screen options)
        (let [f (start-flusher (:flush-interval options 10))
              t0 (System/nanoTime)
-             test-run (run-tests ns-re (:parallelism options (default-pharrallelism)))
+             test-run (run-tests ns-re (:parallelism options (default-pharrallelism)) (options->prioritizer options))
              t1 (System/nanoTime)
              results {:test-run test-run
                       :test-runner-state (if *test-runner-state* @*test-runner-state*)
