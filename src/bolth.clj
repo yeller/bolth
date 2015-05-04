@@ -3,7 +3,8 @@
             [clojure.pprint :as pp]
             clojure.data
             clojure.test
-            io.aviso.exception)
+            io.aviso.exception
+            [bolth.state :as state])
   (:import java.util.concurrent.LinkedBlockingQueue
            java.util.AbstractQueue))
 
@@ -54,7 +55,7 @@
         each-fixture-fn (clojure.test/join-fixtures (::each-fixtures (meta n)))]
     (doseq [v (vals (ns-interns n))]
       (when (:test (meta v))
-        (.put queue [v each-fixture-fn once-fixture-fn])))))
+        (swap! queue conj [v each-fixture-fn once-fixture-fn])))))
 
 (defn record-test-finished [v runtime]
   (when *test-runner-state*
@@ -112,9 +113,24 @@
         (throw e)))))
 
 (defn gather-tests [ns-re]
-  (let [queue (LinkedBlockingQueue.)]
+  (let [queue (atom [])]
     (doseq [n (filter #(re-matches ns-re (name (ns-name %))) (all-ns))]
       (gather-tests-from-ns queue n))
+    queue))
+
+(defn prioritize-tests [tests]
+  (if-let [results @state/*previous-test-run*]
+    (let [mapped-results (group-by (comp str :vars) (:results results))]
+      (sort-by
+        (fn [[test-var _ _ :as test]]
+          (get-in mapped-results [(str test-var) 0 :runtime]))
+        tests))
+    tests))
+
+(defn pour-tests-to-queue [tests]
+  (let [queue (LinkedBlockingQueue. (count tests))]
+    (doseq [t tests]
+      (.put queue t))
     queue))
 
 (defn default-pharrallelism []
@@ -124,6 +140,9 @@
   ([ns-re] (run-tests ns-re (default-pharrallelism)))
   ([ns-re pharrallelism]
    (-> (gather-tests ns-re)
+     deref
+     prioritize-tests
+     pour-tests-to-queue
      (run-gathered-tests pharrallelism))))
 
 ;; clojure.test monkey punching
@@ -381,8 +400,7 @@
      (binding [*out* writer
                *frame-options* (:frame-options options *frame-options*)
                clojure.test/*test-out* writer
-               *test-runner-state* (if (:show-slow-tests options)
-                                     (atom {:results []}))]
+               *test-runner-state* (atom {:results []})]
        (clear-screen options)
        (let [f (start-flusher (:flush-interval options 10))
              t0 (System/nanoTime)
@@ -391,6 +409,7 @@
              results {:test-run test-run
                       :test-runner-state (if *test-runner-state* @*test-runner-state*)
                       :runtime (float (/ (- t1 t0) 1000000))}]
+         (reset! state/*previous-test-run* @*test-runner-state*)
          (future-cancel f)
          (println "\n")
          (println (colorized-summary results))
