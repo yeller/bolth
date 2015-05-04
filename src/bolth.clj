@@ -140,17 +140,25 @@
   (let [results (LinkedBlockingQueue.)
         finished (into [] (map (fn [_] (promise)) (range pharrallelism)))
         workers (map #(run-worker results tests-to-run % finished) (range pharrallelism))
-        full-failures (atom [])]
+        full-failures (atom [])
+        printer (future
+                  (loop [r (.poll results)]
+                    (when (not= r :finished)
+                      (if (nil? r)
+                        (Thread/sleep 10)
+                        (print (format-progress-result r full-failures)))
+                      (recur (.poll results)))))]
     (try
       (dorun workers)
       (doseq [n finished]
         (deref n))
-      (doseq [r (iterator-seq (.iterator results))]
-        (print (format-progress-result r full-failures)))
+      (.put results :finished)
+      @printer
       (doseq [failure @full-failures]
         (print failure))
       (apply merge-with + (map (comp deref deref) finished))
       (finally
+        (future-cancel printer)
         (doseq [worker workers]
           (future-cancel worker))))))
 
