@@ -129,19 +129,22 @@
 
 (defn run-gathered-tests [^AbstractQueue tests-to-run pharrallelism]
   (let [results (ArrayBlockingQueue. 1024)
+        printer-running (atom true)
         finished (into [] (map (fn [_] (promise)) (range pharrallelism)))
         workers (map #(run-worker results tests-to-run % finished) (range pharrallelism))
         printer (future
-                  (while true
+                  (while @printer-running
                     (if-let [r (.poll results)]
                       (print r))))]
     (try
       (dorun workers)
       (doseq [n finished]
         (deref n))
+      (reset! printer-running false)
       (future-cancel printer)
       (apply merge-with + (map (comp deref deref) finished))
       (finally
+        (reset! printer-running false)
         (future-cancel printer)
         (doseq [worker workers]
           (future-cancel worker))))))
