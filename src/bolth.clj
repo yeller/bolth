@@ -128,7 +128,7 @@
       (finally (deliver (nth finished worker-id) 1)))))
 
 (defn run-gathered-tests [^AbstractQueue tests-to-run pharrallelism]
-  (let [results (ArrayBlockingQueue. 1024)
+  (let [results (LinkedBlockingQueue.)
         printer-running (atom true)
         finished (into [] (map (fn [_] (promise)) (range pharrallelism)))
         workers (map #(run-worker results tests-to-run % finished) (range pharrallelism))
