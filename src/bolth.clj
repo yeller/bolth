@@ -8,18 +8,27 @@
   (:import java.util.concurrent.LinkedBlockingQueue
            java.util.AbstractQueue))
 
-;; helpers
+;; colour helpers
+(def ^{:dynamic true
+       :doc "turns on/off colored printing. You shouldn't touch this directly,
+            just pass :colored true or :colored false to run-all-tests"}
+  *colored-printing* true)
+
 (defn redify [s]
-  (str
-    "\u001B[31m"
-    s
-    "\u001B[m"))
+  (if *colored-printing*
+    (str
+      "\u001B[31m"
+      s
+      "\u001B[m")
+    s))
 
 
 (defn greenify [s]
-  (str "\u001B[32m"
-       s
-       "\u001B[m"))
+  (if *colored-printing*
+    (str "\u001B[32m"
+         s
+         "\u001B[m")
+    s))
 
 (def ^{:dynamic true
        :doc
@@ -395,6 +404,10 @@
 
   options for io.aviso.exception/write-exception. Defaults to just showing 10 lines from exception stacktraces. See (doc io.aviso.exception/write-exception) for full documentation.
 
+  :colored-printing : an boolean (defaults to true)
+
+  sets if bolth will print results with color or not. Defaults to true.
+
   ## Returned value
 
   After running (assuming :exit-with-error-code wasn't set),
@@ -433,7 +446,8 @@
      (binding [*out* writer
                *frame-options* (:frame-options options *frame-options*)
                clojure.test/*test-out* writer
-               *test-runner-state* (atom {})]
+               *test-runner-state* (atom {})
+               *colored-printing* (:colored-printing options true)]
        (clear-screen options)
        (let [f (start-flusher (:flush-interval options 10))
              t0 (System/nanoTime)
