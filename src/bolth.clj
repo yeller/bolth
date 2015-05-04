@@ -135,7 +135,8 @@
         printer (future
                   (while @printer-running
                     (if-let [r (.poll results)]
-                      (print r))))]
+                      (print r)
+                      (Thread/sleep 10))))]
     (try
       (dorun workers)
       (doseq [n finished]
