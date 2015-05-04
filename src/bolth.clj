@@ -58,7 +58,7 @@
 
 (defmacro with-test-out [& body]
   `(let [x# (with-test-out-str ~@body)]
-     (.put *result-queue* x#)))
+     (.add ^AbstractQueue *result-queue* x#)))
 
 (defn gather-tests-from-ns [^AbstractQueue queue n]
   (let [once-fixture-fn (clojure.test/join-fixtures (::once-fixtures (meta n)))
@@ -108,7 +108,7 @@
           (finally
             (record-test-finished v (- (System/nanoTime) t0))))))))
 
-(defn run-worker [results tests-to-run worker-id finished]
+(defn run-worker [results ^AbstractQueue tests-to-run worker-id finished]
   (future
     (try
       (binding [*result-queue* results
