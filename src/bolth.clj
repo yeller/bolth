@@ -97,14 +97,19 @@
 
 (defn run-gathered-tests [^AbstractQueue tests-to-run pharrallelism]
   (let [results (LinkedBlockingQueue.)
-        finished (into [] (map (fn [_] (promise)) (range pharrallelism)))]
-    (dotimes [worker-id pharrallelism]
-      (run-worker results tests-to-run worker-id finished))
-    (doseq [n finished]
-      (deref n))
-    (doseq [r (iterator-seq (.iterator results))]
-      (print r))
-    (apply merge-with + (map (comp deref deref) finished))))
+        finished (into [] (map (fn [_] (promise)) (range pharrallelism)))
+        workers (map #(run-worker results tests-to-run % finished) (range pharrallelism))]
+    (try
+      (dorun workers)
+      (doseq [n finished]
+        (deref n))
+      (doseq [r (iterator-seq (.iterator results))]
+        (print r))
+      (apply merge-with + (map (comp deref deref) finished))
+      (catch java.lang.ThreadDeath e
+        (doseq [worker workers]
+          (future-cancel worker))
+        (throw e)))))
 
 (defn gather-tests [ns-re]
   (let [queue (LinkedBlockingQueue.)]
