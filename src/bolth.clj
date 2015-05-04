@@ -61,10 +61,9 @@
   (when *test-runner-state*
     (swap! *test-runner-state*
            (fn [runner-state]
-             {:results
-              (conj (:results runner-state)
-                    {:vars v
-                     :runtime runtime})}))))
+             (conj runner-state
+                   {:vars v
+                    :runtime runtime})))))
 
 (defn test-var [^AbstractQueue result-queue v]
   (when-let [t (:test (meta v))]
@@ -120,7 +119,7 @@
 
 (defn prioritize-tests [tests]
   (if-let [results @state/*previous-test-run*]
-    (let [mapped-results (group-by (comp str :vars) (:results results))]
+    (let [mapped-results (group-by (comp str :vars) results)]
       (sort-by
         (fn [[test-var _ _ :as test]]
           (get-in mapped-results [(str test-var) 0 :runtime]))
@@ -232,7 +231,6 @@
 (defn format-slow-tests [results options]
   (let [slowest (->> results
                   :test-runner-state
-                  :results
                   (sort-by :runtime)
                   reverse
                   (take (:slow-test-count options 10)))]
@@ -372,8 +370,7 @@
 
 
   :test-runner-state
-  {:results
-    [{:vars \"(an-failing-test) (bolth_test.clj:7)\",
+  [{:vars \"(an-failing-test) (bolth_test.clj:7)\",
       :contexts \"\",
       :result
       {:message nil,
@@ -383,7 +380,7 @@
       :type :fail,
       :file \"bolth_test.clj\",
       :line 7},
-      :runtime 37586569}]},
+      :runtime 37586569}],
 
   iff :show-slow-tests is enabled, will contain a set of test run results.
 
@@ -400,7 +397,7 @@
      (binding [*out* writer
                *frame-options* (:frame-options options *frame-options*)
                clojure.test/*test-out* writer
-               *test-runner-state* (atom {:results []})]
+               *test-runner-state* (atom [])]
        (clear-screen options)
        (let [f (start-flusher (:flush-interval options 10))
              t0 (System/nanoTime)
