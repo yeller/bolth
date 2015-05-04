@@ -23,7 +23,7 @@
 
 (def ^{:dynamic true
        :doc
-       "holds an (atom []) of test results, for later analysis by the runner, iff the runner is reporting slow tests"}
+       "holds an (atom {}) of test results, for later analysis by the runner"}
   *test-runner-state* nil)
 
 (def ^{:dynamic true
@@ -61,20 +61,41 @@
   (when *test-runner-state*
     (swap! *test-runner-state*
            (fn [runner-state]
-             (conj runner-state
-                   {:vars v
-                    :runtime runtime})))))
+             (update-in runner-state
+                        [v]
+                        (fn [result]
+                          (assoc result
+                                 :vars v
+                                 :runtime runtime)))))))
+
+(defn record-test-result [v result-type]
+  (when *test-runner-state*
+    (swap! *test-runner-state*
+           (fn [runner-state]
+             (update-in runner-state
+                        [v]
+                        (fn [result]
+                          (assoc result
+                                 :vars v
+                                 :result-type result-type)))))))
 
 (defn test-var [^AbstractQueue result-queue v]
   (when-let [t (:test (meta v))]
-    (let [t0 (System/nanoTime)]
-      (try (t)
-        (catch Throwable e
-          (clojure.test/do-report
-            {:type :error, :message "Uncaught exception, not in assertion."
-             :expected nil, :actual e}))
-        (finally
-          (record-test-finished v (- (System/nanoTime) t0)))))))
+    (let [t0 (System/nanoTime)
+          old-do-report clojure.test/do-report]
+      (.setDynamic #'clojure.test/do-report)
+      (binding [clojure.test/do-report (fn [m]
+                                         (record-test-result v (:type m))
+                                         (old-do-report m))]
+        (try
+          (t)
+          (catch Throwable e
+            (record-test-result v :error)
+            (clojure.test/do-report
+              {:type :error, :message "Uncaught exception, not in assertion."
+               :expected nil, :actual e}))
+          (finally
+            (record-test-finished v (- (System/nanoTime) t0))))))))
 
 (defn run-worker [results tests-to-run worker-id finished]
   (future
@@ -117,13 +138,21 @@
       (gather-tests-from-ns queue n))
     queue))
 
+(defn prioritize-test [[test-var _ _ :as test-run] mapped-results]
+  (let [previous-result (get mapped-results (str test-var))]
+    [(if (nil? previous-result) 0)
+     (if (#{:error :fail} (:result-type previous-result)) (:runtime previous-result))
+     (:runtime previous-result)]))
+
 (defn prioritize-tests [tests]
   (if-let [results @state/*previous-test-run*]
-    (let [mapped-results (group-by (comp str :vars) results)]
-      (sort-by
-        (fn [[test-var _ _ :as test]]
-          (get-in mapped-results [(str test-var) 0 :runtime]))
-        tests))
+    (let [mapped-results (into {} (map (fn [[k v]] [(str k) v]) results))
+          prioritized
+          (reverse
+            (sort-by
+              #(prioritize-test % mapped-results)
+              tests))]
+      prioritized)
     tests))
 
 (defn pour-tests-to-queue [tests]
@@ -231,6 +260,7 @@
 (defn format-slow-tests [results options]
   (let [slowest (->> results
                   :test-runner-state
+                  vals
                   (sort-by :runtime)
                   reverse
                   (take (:slow-test-count options 10)))]
@@ -397,7 +427,7 @@
      (binding [*out* writer
                *frame-options* (:frame-options options *frame-options*)
                clojure.test/*test-out* writer
-               *test-runner-state* (atom [])]
+               *test-runner-state* (atom {})]
        (clear-screen options)
        (let [f (start-flusher (:flush-interval options 10))
              t0 (System/nanoTime)
