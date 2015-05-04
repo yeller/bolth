@@ -86,7 +86,8 @@
       (.setDynamic #'clojure.test/do-report)
       (binding [clojure.test/do-report (fn [m]
                                          (record-test-result v (:type m))
-                                         (old-do-report m))]
+                                         (old-do-report m))
+                clojure.test/*testing-vars* (conj clojure.test/*testing-vars* v)]
         (try
           (t)
           (catch Throwable e
@@ -220,10 +221,15 @@
             (pp/pprint b))))
         (print-expected actual)))))
 
+(defn report-failure [failure-type m]
+  (if (.contains ^String (clojure.test/testing-vars-str m) "EmptyList")
+    (str "\n\n" (redify failure-type))
+    (str "\n\n" (redify failure-type) " in " (clojure.test/testing-vars-str m))))
+
 (defmethod clojure.test/report :fail [m]
   (with-test-out
     (clojure.test/inc-report-counter :fail)
-    (println "\n\n\u001B[31mFAIL\u001B[m in" (clojure.test/testing-vars-str m))
+    (println (report-failure "FAIL" m))
     (when (seq clojure.test/*testing-contexts*) (println (clojure.test/testing-contexts-str)))
     (when-let [message (:message m)] (println message))
     (prn)
@@ -232,7 +238,7 @@
 (defmethod clojure.test/report :error [m]
   (with-test-out
     (clojure.test/inc-report-counter :error)
-    (println "\n\n\u001B[31mERROR\u001B[m in" (clojure.test/testing-vars-str m))
+    (println (report-failure "ERROR" m))
     (when (seq clojure.test/*testing-contexts*) (println (clojure.test/testing-contexts-str)))
     (when-let [message (:message m)] (println message))
     (println "expected:" (pr-str (:expected m)))
