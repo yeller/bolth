@@ -144,8 +144,10 @@
 
 (defn gather-tests [ns-re]
   (let [queue (atom [])]
-    (doseq [n (filter #(re-matches ns-re (name (ns-name %))) (all-ns))]
-      (gather-tests-from-ns queue n))
+    (dorun
+      (pmap
+        #(gather-tests-from-ns queue %)
+        (filter #(re-matches ns-re (name (ns-name %))) (all-ns))))
     queue))
 
 (defn prioritize-test [[test-var _ _ :as test-run] mapped-results]
