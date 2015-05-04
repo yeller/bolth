@@ -2,9 +2,16 @@
   (:require bolth
             [clojure.test :refer :all]))
 
-(deftest an-failing-test
+(deftest an-fast-failing-test
+  (is (= 1 2)))
+
+(deftest an-slow-failing-test
   (Thread/sleep 30)
   (is (= 1 2)))
 
-(deftest an-passing-test
+(deftest an-fast-passing-test
+  (is (= 2 2)))
+
+(deftest an-slow-passing-test
+  (Thread/sleep 30)
   (is (= 2 2)))
