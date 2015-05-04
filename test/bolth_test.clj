@@ -17,5 +17,4 @@
 
 (dotimes [i 1000]
   (eval `(deftest ~(symbol (str "generated-test-" i))
-           (is (= 1 1))))
-  )
+           (is (= 1 1)))))
