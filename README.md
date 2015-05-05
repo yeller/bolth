@@ -10,8 +10,11 @@ results, and a variety of reporting options.
 
 ## Installation
 
-grab from clojars
+Grab it from [clojars](https://clojars.org/bolth)
 
+```
+[bolth "0.1.0"]
+```
 ## Usage
 
 There's one main function: `bolth/run-all-tests`.
