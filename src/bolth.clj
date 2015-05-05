@@ -176,15 +176,24 @@
      (if (#{:error :fail} (:result-type previous-result)) (:runtime previous-result))
      (:runtime previous-result)]))
 
+(defn slowest-test [mapped-results tests]
+  (last
+    (sort-by
+      (fn [[test-var _ _]] (get-in mapped-results [(str test-var) :runtime]))
+      tests)))
+
 (defn smart-prioritize-tests [tests]
   (if-let [results @state/*previous-test-run*]
     (let [mapped-results (into {} (map (fn [[k v]] [(str k) v]) results))
           prioritized
-          (reverse
-            (sort-by
-              #(prioritize-test % mapped-results)
-              tests))]
-      prioritized)
+          (vec
+            (reverse
+              (sort-by
+                #(prioritize-test % mapped-results)
+                tests)))
+          slowest-test (slowest-test mapped-results prioritized)
+          with-slowest-first (into [slowest-test] (remove #(= % slowest-test) prioritized))]
+      with-slowest-first)
     tests))
 
 (defn pour-tests-to-queue [tests]
