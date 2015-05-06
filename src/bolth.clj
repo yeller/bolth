@@ -198,7 +198,7 @@
 
 (defn pour-tests-to-queue [tests]
   (let [queue (ArrayBlockingQueue. (count tests))]
-    (doseq [t tests]
+    (doseq [t (remove nil? tests)]
       (.put queue t))
     queue))
 
