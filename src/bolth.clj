@@ -127,35 +127,38 @@
         (.printStackTrace e))
       (finally (deliver (nth finished worker-id) 1)))))
 
-(defn format-progress-result [^String r full-failures]
+(defn format-progress-result [^String r ^StringBuilder full-failures]
   (if (= r ".")
-    "."
+    r
     (do
-      (swap! full-failures conj r)
+      (.append full-failures r)
+      (.append full-failures "\n")
       (if (.contains r "ERROR")
         (redify "E")
         (redify "F")))))
+
+(defn start-printer [full-failures results]
+  (future
+    (loop [r (.poll results)]
+      (when (not= r :finished)
+        (if (nil? r)
+          (Thread/sleep 10)
+          (print (format-progress-result r full-failures)))
+        (recur (.poll results))))))
 
 (defn run-gathered-tests [^AbstractQueue tests-to-run pharrallelism]
   (let [results (LinkedBlockingQueue.)
         finished (into [] (map (fn [_] (promise)) (range pharrallelism)))
         workers (map #(run-worker results tests-to-run % finished) (range pharrallelism))
-        full-failures (atom [])
-        printer (future
-                  (loop [r (.poll results)]
-                    (when (not= r :finished)
-                      (if (nil? r)
-                        (Thread/sleep 10)
-                        (print (format-progress-result r full-failures)))
-                      (recur (.poll results)))))]
+        full-failures (StringBuilder.)
+        printer (start-printer full-failures results)]
     (try
       (dorun workers)
       (doseq [n finished]
         (deref n))
       (.put results :finished)
       @printer
-      (doseq [failure @full-failures]
-        (print failure))
+      (print (str full-failures))
       (apply merge-with + (map (comp deref deref) finished))
       (finally
         (future-cancel printer)
