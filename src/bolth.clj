@@ -137,7 +137,7 @@
         (redify "E")
         (redify "F")))))
 
-(defn start-printer [full-failures results]
+(defn start-printer [full-failures ^AbstractQueue results]
   (let [builder (StringBuilder.)]
     (future
       (loop [r (.poll results)]
@@ -150,9 +150,10 @@
               (do
                 (print (str builder))
                 (flush)
-                (.setLength builder 0))
-              (.append builder ^String (format-progress-result r full-failures))))
-          (recur (.poll results)))))))
+                (.setLength builder 0)
+                (Thread/sleep 10))
+              (.append builder ^String (format-progress-result r full-failures)))
+            (recur (.poll results))))))))
 
 (defn run-gathered-tests [^AbstractQueue tests-to-run pharrallelism]
   (let [results (LinkedBlockingQueue.)
