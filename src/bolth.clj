@@ -138,13 +138,21 @@
         (redify "F")))))
 
 (defn start-printer [full-failures results]
-  (future
-    (loop [r (.poll results)]
-      (when (not= r :finished)
-        (if (nil? r)
-          (Thread/sleep 10)
-          (print (format-progress-result r full-failures)))
-        (recur (.poll results))))))
+  (let [builder (StringBuilder.)]
+    (future
+      (loop [r (.poll results)]
+        (if (= r :finished)
+          (do
+            (print (str builder))
+            (flush))
+          (do
+            (if (nil? r)
+              (do
+                (print (str builder))
+                (flush)
+                (.setLength builder 0))
+              (.append builder ^String (format-progress-result r full-failures))))
+          (recur (.poll results)))))))
 
 (defn run-gathered-tests [^AbstractQueue tests-to-run pharrallelism]
   (let [results (LinkedBlockingQueue.)
@@ -366,9 +374,6 @@
   (when (and (contains? options :warn-on-slow-test-limit-ms) (< (:warn-on-slow-test-limit-ms options 1000) (:runtime results)))
     (println (redify "SLOW TEST RUN"))))
 
-(defn start-flusher [interval]
-  (future (if interval (while true (do (Thread/sleep interval) (flush))))))
-
 (defn colorized-summary [results]
   (if (failing-tests? results)
     (redify (format-results results))
@@ -521,15 +526,13 @@
                *test-runner-state* (atom {})
                *colored-printing* (:colored-printing options true)]
        (clear-screen options)
-       (let [f (start-flusher (:flush-interval options 10))
-             t0 (System/nanoTime)
+       (let [t0 (System/nanoTime)
              test-run (run-tests ns-re (:parallelism options (default-pharrallelism)) (options->prioritizer options))
              t1 (System/nanoTime)
              results {:test-run test-run
                       :test-runner-state (if *test-runner-state* @*test-runner-state*)
                       :runtime (float (/ (- t1 t0) 1000000))}]
          (reset! state/*previous-test-run* @*test-runner-state*)
-         (future-cancel f)
          (println "\n")
          (println (colorized-summary results))
          (maybe-warn-on-slow-test-run results options)
