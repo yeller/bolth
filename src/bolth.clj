@@ -548,5 +548,5 @@
    (require 'io.aviso.exception)
    (let [r (apply (resolve 'clojure.tools.namespace.repl/refresh) tools-ns-args)]
      (when (instance? Throwable r)
-       ((resolve 'io.aviso.exception/write-exception) r))
+       ((resolve 'io.aviso.exception/write-exception) *out* r frame-options))
      r)))
