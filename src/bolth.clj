@@ -4,7 +4,8 @@
             clojure.data
             clojure.test
             io.aviso.exception
-            [bolth.state :as state])
+            [bolth.state :as state]
+            [clojure.tools.namespace.file :as ns-file])
   (:import java.util.concurrent.LinkedBlockingQueue
            java.util.concurrent.ArrayBlockingQueue
            java.util.AbstractQueue))
@@ -174,13 +175,61 @@
         (doseq [worker workers]
           (future-cancel worker))))))
 
-(defn gather-tests [ns-re]
-  (let [queue (atom [])]
-    (dorun
-      (pmap
-        #(gather-tests-from-ns queue %)
-        (filter #(re-matches ns-re (name (ns-name %))) (all-ns))))
-    queue))
+(defprotocol HasTests
+  (gather-tests [this] "returns a vector of tests"))
+
+(extend-type java.util.regex.Pattern
+  HasTests
+  (gather-tests [ns-re]
+    (let [queue (atom [])]
+      (dorun
+        (pmap
+          #(gather-tests-from-ns queue %)
+          (filter #(re-matches ns-re (name (ns-name %))) (all-ns))))
+      @queue)))
+
+(defn filename->ns
+  "turns a filename into an parsed clojure namespace declaration.
+  returns nil if the file doesn't exist"
+  [filename]
+  (try
+    (ns-file/read-file-ns-decl filename)
+    (catch java.io.FileNotFoundException _
+      nil)))
+
+(defn parse-filename-and-line [s]
+  (re-matches #"(.*):(\d+)" s))
+
+(defn tests-from-maybe-filename [s]
+  (if-let [ns-from-file (filename->ns s)]
+    (gather-tests (re-pattern (str (second ns-from-file))))
+    (gather-tests (re-pattern s))))
+
+(defn test->line-number [t]
+  (:line (meta (first t))))
+
+(defn foo [line-number tests]
+  (->> tests
+    (group-by test->line-number)
+    (sort-by first)
+    last
+    second))
+
+(defn filter-tests-by-line [line-number tests]
+  (->> tests
+    (sort-by test->line-number)
+    (take-while #(>= line-number (test->line-number %)))
+    (group-by test->line-number)
+    (sort-by first)
+    last
+    second))
+
+(extend-type java.lang.String
+  HasTests
+  (gather-tests [s]
+    (if-let [[_ filename line-number] (parse-filename-and-line s)]
+      (filter-tests-by-line (Long/parseLong line-number) (tests-from-maybe-filename filename))
+      (tests-from-maybe-filename s))))
 
 (defn prioritize-test [[test-var _ _ :as test-run] mapped-results]
   (let [previous-result (get mapped-results (str test-var))]
@@ -219,7 +268,6 @@
 
 (defn run-tests [ns-re pharrallelism prioritizer]
   (-> (gather-tests ns-re)
-    deref
     prioritizer
     pour-tests-to-queue
     (run-gathered-tests pharrallelism)))
