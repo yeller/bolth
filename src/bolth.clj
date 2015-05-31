@@ -457,7 +457,6 @@
   (assert (and (number? (:clear-screen-lines options 50)) (pos? (:clear-screen-lines options 50))) (str ":clear-screen-lines should be a positive number, but was: " (pr-str (:clear-screen-lines options 50))))
   (assert (and (number? (:flush-interval options 10)) (pos? (:flush-interval options 50))) (str ":flush-interval should be a positive number, but was: " (pr-str (:flush-interval options 50))))
   (assert (map? (:frame-options options *frame-options*)) (str ":frame-options should be a map, but was: " (pr-str (:frame-options options *frame-options*))))
-  (assert (#{true false} (:colored-printing options true)) (str ":colored-printing should be a boolean, but was: " (pr-str (:colored-printing options true))))
   (assert (#{:random :agony :gathered nil} (:priority options :agony)) (str ":priority should be one of :random, :agony, :gathered, or not set at all, but was: " (pr-str (:priority options :agony))))
   (assert (fn? (options->prioritizer options)) (str "prioritizer should a function, but was: " (pr-str (options->prioritizer options)))))
 
