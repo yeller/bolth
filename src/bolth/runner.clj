@@ -64,8 +64,8 @@
      (.add ^AbstractQueue *result-queue* x#)))
 
 (defn gather-tests-from-ns [^AbstractQueue queue n]
-  (let [once-fixture-fn (clojure.test/join-fixtures (::once-fixtures (meta n)))
-        each-fixture-fn (clojure.test/join-fixtures (::each-fixtures (meta n)))]
+  (let [once-fixture-fn (clojure.test/join-fixtures (:clojure.test/once-fixtures (meta n)))
+        each-fixture-fn (clojure.test/join-fixtures (:clojure.test/each-fixtures (meta n)))]
     (doseq [v (vals (ns-interns n))]
       (when (:test (meta v))
         (swap! queue conj (->TestSpec v each-fixture-fn once-fixture-fn))))))
@@ -119,10 +119,17 @@
         (loop []
           (if-let [{:keys [var each-fixture-fn once-fixture-fn]} (.poll tests-to-run)]
             (do
-              (once-fixture-fn
-                (fn []
-                  (each-fixture-fn
-                    #(test-var results var))))
+              (try
+                (once-fixture-fn
+                  (fn []
+                    (each-fixture-fn
+                      #(test-var results var))))
+                (catch Throwable e
+                  (record-test-result var :error)
+                  (clojure.test/do-report
+                    {:type :error, :message "Uncaught exception, not in assertion."
+                     :expected nil, :actual e})
+                  nil))
               (recur))
             (do
               (deliver (nth finished worker-id) clojure.test/*report-counters*)))))
