@@ -2,6 +2,6 @@
 
 set -e
 
-grench eval "(require 'bolth)"
-grench eval "(do (bolth/pretty-refresh) nil)"
-grench eval "(do (bolth/run-all-tests \"test/bolth_test.clj\" {:clear-screen true :warn-on-slow-test-limit-ms 10 :force-real-stdout true :show-slow-tests true}) nil)"
+grench eval "(require 'bolth.test)"
+grench eval "(do (bolth.test/pretty-refresh) nil)"
+grench eval "(do (bolth.test/run-all-tests \"test/bolth_test.clj\" {:clear-screen true :warn-on-slow-test-limit-ms 10 :force-real-stdout true :show-slow-tests true}) nil)"

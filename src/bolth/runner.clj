@@ -1,4 +1,4 @@
-(ns bolth
+(ns bolth.runner
   (:require [clojure.string :as string]
             [clojure.pprint :as pp]
             clojure.data
@@ -564,8 +564,8 @@
 
   }"
   ([] (run-all-tests #".*"))
-  ([ns-re] (run-all-tests ns-re {}))
-  ([ns-re options]
+  ([target] (run-all-tests target {}))
+  ([target options]
    (validate-options options)
    (let [writer (if (:force-real-stdout options) (java.io.PrintWriter. System/out) *out*)]
      (binding [*out* writer
@@ -575,7 +575,7 @@
                *colored-printing* (:colored-printing options true)]
        (clear-screen options)
        (let [t0 (System/nanoTime)
-             test-run (run-tests ns-re (:parallelism options (default-pharrallelism)) (options->prioritizer options))
+             test-run (run-tests target (:parallelism options (default-pharrallelism)) (options->prioritizer options))
              t1 (System/nanoTime)
              results {:test-run test-run
                       :test-runner-state (if *test-runner-state* @*test-runner-state*)
@@ -587,13 +587,3 @@
          (maybe-show-slow-tests results options)
          (maybe-system-exit results options)
          results)))))
-
-(defn pretty-refresh
-  ([] (pretty-refresh [] {}))
-  ([tools-ns-args frame-options]
-   (require 'clojure.tools.namespace.repl)
-   (require 'io.aviso.exception)
-   (let [r (apply (resolve 'clojure.tools.namespace.repl/refresh) tools-ns-args)]
-     (when (instance? Throwable r)
-       ((resolve 'io.aviso.exception/write-exception) *out* r frame-options))
-     r)))
