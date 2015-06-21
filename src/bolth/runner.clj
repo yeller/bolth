@@ -57,6 +57,8 @@
        ~@body
        (str s#))))
 
+(defrecord TestSpec [var each-fixture-fn once-fixture-fn])
+
 (defmacro with-test-out [& body]
   `(let [x# (with-test-out-str ~@body)]
      (.add ^AbstractQueue *result-queue* x#)))
@@ -66,7 +68,7 @@
         each-fixture-fn (clojure.test/join-fixtures (::each-fixtures (meta n)))]
     (doseq [v (vals (ns-interns n))]
       (when (:test (meta v))
-        (swap! queue conj [v each-fixture-fn once-fixture-fn])))))
+        (swap! queue conj (->TestSpec v each-fixture-fn once-fixture-fn))))))
 
 (defn record-test-finished [v runtime]
   (when *test-runner-state*
@@ -115,12 +117,12 @@
       (binding [*result-queue* results
                 clojure.test/*report-counters* (ref {:pass 0 :fail 0 :error 0})]
         (loop []
-          (if-let [[tvar each-fixture once-fixture] (.poll tests-to-run)]
+          (if-let [{:keys [var each-fixture-fn once-fixture-fn]} (.poll tests-to-run)]
             (do
-              (once-fixture
+              (once-fixture-fn
                 (fn []
-                  (each-fixture
-                    #(test-var results tvar))))
+                  (each-fixture-fn
+                    #(test-var results var))))
               (recur))
             (do
               (deliver (nth finished worker-id) clojure.test/*report-counters*)))))
@@ -206,14 +208,7 @@
     (gather-tests (re-pattern s))))
 
 (defn test->line-number [t]
-  (:line (meta (first t))))
-
-(defn foo [line-number tests]
-  (->> tests
-    (group-by test->line-number)
-    (sort-by first)
-    last
-    second))
+  (:line (meta (:var t))))
 
 (defn filter-tests-by-line [line-number tests]
   (->> tests
@@ -231,8 +226,9 @@
       (filter-tests-by-line (Long/parseLong line-number) (tests-from-maybe-filename filename))
       (tests-from-maybe-filename s))))
 
-(defn prioritize-test [[test-var _ _ :as test-run] mapped-results]
-  (let [previous-result (get mapped-results (str test-var))]
+(defn prioritize-test [test-run mapped-results]
+  (let [test-var (:var test-run)
+        previous-result (get mapped-results (str test-var))]
     [(if (nil? previous-result) 0)
      (if (#{:error :fail} (:result-type previous-result)) (:runtime previous-result))
      (:runtime previous-result)]))
@@ -240,7 +236,7 @@
 (defn slowest-test [mapped-results tests]
   (last
     (sort-by
-      (fn [[test-var _ _]] (get-in mapped-results [(str test-var) :runtime]))
+      (fn [test-spec] (get-in mapped-results [(str (:var test-spec)) :runtime]))
       tests)))
 
 (defn smart-prioritize-tests [tests]

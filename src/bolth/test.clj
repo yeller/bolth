@@ -75,7 +75,7 @@
   :prioritizer : an function (defaults to nil)
 
   lets you pass a custom function to determine which order the tests are run in. Takes a seq
-  of [var test-f fixture-each-f fixture-once-f], and returns them in whatever order you like.
+  of {:var var :each-fixture-fn fixture-each-f :once-fixture-fn fixture-once-f}, and returns them in whatever order you like.
   Note that this takes priority over passing :priority.
 
   ## Returned value
