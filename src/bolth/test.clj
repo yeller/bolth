@@ -1,15 +1,7 @@
 (ns bolth.test
-  (:require [clojure.string :as string]
-            [clojure.pprint :as pp]
-            clojure.data
-            clojure.test
-            io.aviso.exception
-            bolth.runner
-            [bolth.state :as state]
-            [clojure.tools.namespace.file :as ns-file])
-  (:import java.util.concurrent.LinkedBlockingQueue
-           java.util.concurrent.ArrayBlockingQueue
-           java.util.AbstractQueue))
+  (:require io.aviso.exception
+            clojure.tools.namespace.repl
+            bolth.runner))
 
 (defn run-all-tests
   "runs tests, just like clojure.test/run-all-tests.
@@ -122,9 +114,7 @@
 (defn pretty-refresh
   ([] (pretty-refresh [] {}))
   ([tools-ns-args frame-options]
-   (require 'clojure.tools.namespace.repl)
-   (require 'io.aviso.exception)
-   (let [r (apply (resolve 'clojure.tools.namespace.repl/refresh) tools-ns-args)]
+   (let [r (apply clojure.tools.namespace.repl/refresh tools-ns-args)]
      (when (instance? Throwable r)
-       ((resolve 'io.aviso.exception/write-exception) *out* r frame-options))
+       (io.aviso.exception/write-exception *out* r frame-options))
      r)))
