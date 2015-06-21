@@ -6,6 +6,8 @@
 (defn run-all-tests
   "runs tests, just like clojure.test/run-all-tests.
    Takes an optional regex to only run matching vars, and an options map.
+   Alternatively, takes a filename (as a string) for a file in which to discover tests,
+   or a filename:line-number (as a string), which will run the closest deftest to that line number.
 
   ## Available options
 
