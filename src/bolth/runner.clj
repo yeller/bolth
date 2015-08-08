@@ -92,14 +92,29 @@
                                  :vars v
                                  :result-type result-type)))))))
 
+(defn file-and-line
+  [^Throwable exception depth]
+  (let [stacktrace (.getStackTrace exception)]
+    (if (< depth (count stacktrace))
+      (let [^StackTraceElement s (nth stacktrace depth)]
+        {:file (.getFileName s) :line (.getLineNumber s)})
+      {:file nil :line nil})))
+
+(defn do-report [v]
+  (fn [m]
+    (record-test-result v (:type m))
+    (clojure.test/report
+      (case
+        (:type m)
+        :fail (merge (file-and-line (new java.lang.Throwable) 1) m)
+        :error (merge (file-and-line (:actual m) 0) m)
+        m))))
+
 (defn test-var [^AbstractQueue result-queue v]
   (when-let [t (:test (meta v))]
-    (let [t0 (System/nanoTime)
-          old-do-report clojure.test/do-report]
+    (let [t0 (System/nanoTime)]
       (.setDynamic #'clojure.test/do-report)
-      (binding [clojure.test/do-report (fn [m]
-                                         (record-test-result v (:type m))
-                                         (old-do-report m))
+      (binding [clojure.test/do-report (do-report v)
                 clojure.test/*testing-vars* (conj clojure.test/*testing-vars* v)]
         (try
           (t)

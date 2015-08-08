@@ -8,6 +8,10 @@
   (Thread/sleep 30)
   (is (= 1 2)))
 
+(deftest an-failing-test-with-testing
+  (testing "blah"
+    (is (= 1 2))))
+
 (deftest an-fast-passing-test
   (is (= 2 2)))
 
